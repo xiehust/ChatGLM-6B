@@ -7,15 +7,22 @@ set -e
 
 # The argument to this script is the region name. 
 
-if [ "$#" -ne 1 ] ; then
-    echo "usage: $0 [region-name] [option]"
+if [ "$#" -lt 1 ]||[ "$#" -gt 2 ]; then
+    echo "usage: $0 [region-name] [profile-name (optional)]"
     exit 1
 fi
 
 region=$1
 
+if [ "$#" -eq 2 ]; then
+    profile=$2
+else
+    profile="default"
+fi
+
+
 # Get the account number associated with the current IAM credentials
-account=$(aws sts get-caller-identity --query Account --output text)
+account=$(aws sts --profile $profile get-caller-identity --query Account --output text)
 
 if [ $? -ne 0 ]
 then
@@ -26,17 +33,17 @@ inference_image=chatglm-6b-inference-api
 inference_fullname=${account}.dkr.ecr.${region}.amazonaws.com/${inference_image}:latest
 
 # If the repository doesn't exist in ECR, create it.
-aws ecr describe-repositories --repository-names "${inference_image}" --region ${region} || aws ecr create-repository --repository-name "${inference_image}" --region ${region}
+aws --profile ${profile} ecr describe-repositories --repository-names "${inference_image}" --region ${region} || aws --profile ${profile} ecr create-repository --repository-name "${inference_image}" --region ${region}
 
 if [ $? -ne 0 ]
 then
-    aws ecr create-repository --repository-name "${inference_image}" --region ${region}
+    aws --profile ${profile} ecr create-repository --repository-name "${inference_image}" --region ${region}
 fi
 
 # Get the login command from ECR and execute it directly
-aws ecr get-login-password --region $region | docker login --username AWS --password-stdin $account.dkr.ecr.$region.amazonaws.com
+aws --profile ${profile} ecr get-login-password --region $region | docker login --username AWS --password-stdin $account.dkr.ecr.$region.amazonaws.com
 
-aws ecr set-repository-policy \
+aws --profile ${profile} ecr set-repository-policy \
     --repository-name "${inference_image}" \
     --policy-text "file://ecr-policy.json" \
     --region ${region}
